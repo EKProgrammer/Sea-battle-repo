@@ -26,12 +26,24 @@ def load_image(name, colorkey=None):
     return image
 
 
+def load_sound(name):
+    fullname = os.path.join('data', name)
+    if not os.path.isfile(fullname):
+        print(f"Файл с музыкой '{fullname}' не найден")
+        sys.exit()
+    soundtrack = pygame.mixer.Sound(fullname)
+    pygame.mixer.music.load(fullname)
+    pygame.mixer.music.set_volume(0.05)
+    return soundtrack
+
+
 class Game:
     def __init__(self):
         pygame.display.set_caption('Морской бой')
         self.clock = pygame.time.Clock()
-        self.all_sprites = pygame.sprite.Group()
+        self.ship_group = pygame.sprite.Group()
         self.background = Background()
+
         self.scenes = [self.background.begin_scene,
                        self.background.begin_scene,
                        self.background.placement_of_ships_scene,
@@ -40,6 +52,8 @@ class Game:
 
     def game_loop(self):
         self.scenes[self.scenes_idx](0)
+        load_sound('soundtrack.wav')
+        pygame.mixer.music.play(loops=-1)
         running = True
         while running:
             for event in pygame.event.get():
@@ -49,18 +63,27 @@ class Game:
                         140 <= event.pos[0] <= 370 and 350 <= event.pos[1] <= 430:
                     self.scenes_idx += 1
                     self.scenes[self.scenes_idx](self.scenes_idx)
-                elif self.scenes_idx == 1 and event.type == pygame.MOUSEBUTTONDOWN:
-                    if 140 <= event.pos[0] <= 390 and 300 <= event.pos[1] <= 380:
+                elif self.scenes_idx == 1 and event.type == pygame.MOUSEBUTTONDOWN and \
+                        140 <= event.pos[0] <= 390 and (300 <= event.pos[1] <= 380 or
+                                                        400 <= event.pos[1] <= 480):
+                    if 300 <= event.pos[1] <= 380:
                         self.mode = 'Робот'
-                        self.scenes_idx += 1
-                        self.scenes[self.scenes_idx]()
-                        print(self.mode)
-                    elif 140 <= event.pos[0] <= 390 and 400 <= event.pos[1] <= 480:
+                    else:
                         self.mode = '2 игрока'
-                        self.scenes_idx += 1
-                        self.scenes[self.scenes_idx]()
-                        print(self.mode)
-            self.all_sprites.draw(screen)
+                    self.scenes_idx += 1
+                    self.scenes[self.scenes_idx]()
+                    self.ships = [Ship(self.ship_group, 'single', 540, 210), Ship(self.ship_group, 'single', 600, 210),
+                                  Ship(self.ship_group, 'single', 660, 210), Ship(self.ship_group, 'single', 720, 210),
+                                  Ship(self.ship_group, 'double', 540, 270), Ship(self.ship_group, 'double', 630, 270),
+                                  Ship(self.ship_group, 'double', 720, 270), Ship(self.ship_group, 'third', 540, 330),
+                                  Ship(self.ship_group, 'third', 660, 330), Ship(self.ship_group, 'forth', 540, 390)]
+                elif self.scenes_idx == 2 and event.type == pygame.MOUSEBUTTONDOWN and \
+                        80 <= event.pos[0] <= 160 and 80 <= event.pos[1] <= 130:
+                    self.scenes_idx -= 1
+                    self.scenes[self.scenes_idx](self.scenes_idx)
+                    self.ship_group.empty()
+
+            self.ship_group.draw(screen)
             pygame.display.flip()
 
     def robot_move(self):
@@ -78,10 +101,15 @@ class GameField:
         pass
 
 
-class Ship:
-    def __init__(self, type):
+class Ship(pygame.sprite.Sprite):
+    def __init__(self, group, type, x, y):
+        super().__init__(group)
+        self.image = load_image(f"{type}-deck ship.png")
         self.type = type
         self.state = 'stable'
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
 
     def get_type(self):
         return self.type
@@ -101,29 +129,28 @@ class Background:
         pygame.draw.line(screen, 'red', (shift, shift + 90),
                          (shift + 810, shift + 90), 3)
 
-    def draw_fields(self):
-        for i in [60, 450]:
-            pygame.draw.rect(screen, 'blue', (shift + i, shift + 150, 300, 300), 3)
+    def draw_field(self, coord):
+        # (60, 100, 35)
+        # (450, 490, 755)
+        pygame.draw.rect(screen, 'blue', (shift + coord[0], shift + 150, 300, 300), 3)
         font = pygame.font.Font(None, 30)
-        for j in [100, 490]:
-            for i in range(1, 11):
-                text = font.render(str(i), True, (0, 0, 255))
-                if i == 10:
-                    screen.blit(text, (i * cell_size + j - 5,
-                                       4 * cell_size + shift + 5))
-                else:
-                    screen.blit(text, (i * cell_size + j,
-                                       4 * cell_size + shift + 5))
+        for i in range(1, 11):
+            text = font.render(str(i), True, (0, 0, 255))
+            if i == 10:
+                screen.blit(text, (i * cell_size + coord[1] - 5,
+                                   4 * cell_size + shift + 5))
+            else:
+                screen.blit(text, (i * cell_size + coord[1],
+                                   4 * cell_size + shift + 5))
         string = 'абвгдеёжзи'
-        for j in [35, 755]:
-            for i in range(10):
-                text = font.render(string[i], True, (0, 0, 255))
-                if i == 4 or i == 7:
-                    screen.blit(text, (shift + 5 + j - 2,
-                                       (5 + i) * cell_size + shift + 5))
-                else:
-                    screen.blit(text, (shift + 5 + j,
-                                       (5 + i) * cell_size + shift + 5))
+        for i in range(10):
+            text = font.render(string[i], True, (0, 0, 255))
+            if i == 4 or i == 7:
+                screen.blit(text, (shift + 5 + coord[2] - 2,
+                                   (5 + i) * cell_size + shift + 5))
+            else:
+                screen.blit(text, (shift + 5 + coord[2],
+                                   (5 + i) * cell_size + shift + 5))
 
     def begin_scene(self, num_scene):
         screen.blit(load_image("background.jpg"), (0, 0))
@@ -150,9 +177,30 @@ class Background:
         screen.blit(text, (80, 180))
 
     def placement_of_ships_scene(self):
-        pass
+        screen.blit(load_image("background.jpg"), (0, 0))
+        self.draw_background()
+        self.draw_field((60, 100, 35))
+
+        font = pygame.font.SysFont("Segoe Print", 30)
+        text = font.render("Далее", True, (0, 0, 255))
+        screen.blit(text, (720, 465))
+        pygame.draw.rect(screen, (0, 0, 255), (710, 470, 115, 50), 5)
+
+        text = font.render("Авто", True, (0, 0, 255))
+        screen.blit(text, (570, 465))
+        pygame.draw.rect(screen, (0, 0, 255), (560, 470, 110, 50), 5)
+
+        screen.blit(load_image("reset.png"), (450, 450))
+        pygame.draw.rect(screen, (0, 0, 255), (440, 440, 80, 80), 5)
+
+        pygame.draw.polygon(screen, (0, 0, 255), ((120, 90), (90, 105), (120, 120)))
+        pygame.draw.rect(screen, (0, 0, 255), (120, 100, 30, 10))
+        pygame.draw.rect(screen, (0, 0, 255), (80, 80, 80, 50), 5)
 
     def battle_scene(self):
+        pass
+
+    def result_scene(self):
         pass
 
 
