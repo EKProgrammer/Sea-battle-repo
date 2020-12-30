@@ -1,6 +1,7 @@
 import pygame
 import os
 import sys
+from random import randint, choice
 
 pygame.init()
 size = width, height = 930, 600
@@ -33,7 +34,7 @@ def load_sound(name):
         sys.exit()
     soundtrack = pygame.mixer.Sound(fullname)
     pygame.mixer.music.load(fullname)
-    pygame.mixer.music.set_volume(0.05)
+    pygame.mixer.music.set_volume(0.03)
     return soundtrack
 
 
@@ -50,6 +51,13 @@ class Game:
                        self.background.battle_scene]
         self.scenes_idx = 0
 
+        self.selected_ship = None
+        self.last_selected_ship = None
+        self.angle = 90
+
+        self.fields = [GameField(), GameField()]
+        self.field_idx = 0
+
     def game_loop(self):
         self.scenes[self.scenes_idx](0)
         load_sound('soundtrack.wav')
@@ -57,12 +65,15 @@ class Game:
         running = True
         while running:
             for event in pygame.event.get():
+
                 if event.type == pygame.QUIT:
                     running = False
+
                 elif event.type == pygame.MOUSEBUTTONDOWN and self.scenes_idx == 0 and \
                         140 <= event.pos[0] <= 370 and 350 <= event.pos[1] <= 430:
                     self.scenes_idx += 1
                     self.scenes[self.scenes_idx](self.scenes_idx)
+
                 elif self.scenes_idx == 1 and event.type == pygame.MOUSEBUTTONDOWN and \
                         140 <= event.pos[0] <= 390 and (300 <= event.pos[1] <= 380 or
                                                         400 <= event.pos[1] <= 480):
@@ -72,19 +83,82 @@ class Game:
                         self.mode = '2 игрока'
                     self.scenes_idx += 1
                     self.scenes[self.scenes_idx]()
-                    self.ships = [Ship(self.ship_group, 'single', 540, 210), Ship(self.ship_group, 'single', 600, 210),
-                                  Ship(self.ship_group, 'single', 660, 210), Ship(self.ship_group, 'single', 720, 210),
-                                  Ship(self.ship_group, 'double', 540, 270), Ship(self.ship_group, 'double', 630, 270),
-                                  Ship(self.ship_group, 'double', 720, 270), Ship(self.ship_group, 'third', 540, 330),
-                                  Ship(self.ship_group, 'third', 660, 330), Ship(self.ship_group, 'forth', 540, 390)]
+                    self.init_ships()
+
                 elif self.scenes_idx == 2 and event.type == pygame.MOUSEBUTTONDOWN and \
                         80 <= event.pos[0] <= 160 and 80 <= event.pos[1] <= 130:
                     self.scenes_idx -= 1
                     self.scenes[self.scenes_idx](self.scenes_idx)
                     self.ship_group.empty()
 
+                elif event.type == pygame.MOUSEBUTTONDOWN and self.scenes_idx == 2 and self.last_selected_ship and\
+                        450 <= event.pos[0] <= 510 and 450 <= event.pos[1] <= 510 and \
+                        self.last_selected_ship.type != 'single':
+                    self.last_selected_ship.rotate()
+                    if not self.last_selected_ship.correct_coords(self.ships):
+                        self.last_selected_ship.rotate()
+
+                elif self.scenes_idx == 2 and event.type == pygame.MOUSEBUTTONDOWN and \
+                        560 <= event.pos[0] <= 670 and 470 <= event.pos[1] <= 520:
+                    self.fields[self.field_idx].generate_random_field(self.ships)
+
+                elif self.scenes_idx == 2 and event.type == pygame.MOUSEBUTTONDOWN and \
+                        710 <= event.pos[0] <= 825 and 470 <= event.pos[1] <= 520 and \
+                        all([True if pygame.Rect(shift + 60, shift + 150, 300, 300).contains(i.rect) else False
+                             for i in self.ships]):
+                    self.field_idx += 1
+                    if self.mode == 'Робот':
+                        self.fields[self.field_idx].generate_random_field(self.ships)
+                        self.ship_group.empty()
+                        self.background.battle_scene()
+
+                    if self.mode == 'Робот' or self.field_idx == 2:
+                        for i in self.fields:
+                            i.set_field(self.ships)
+                        self.ship_group.empty()
+                        self.scenes_idx += 1
+                        self.scenes[self.scenes_idx]()
+                    else:
+                        self.scenes[self.scenes_idx]()
+                        self.ship_group.empty()
+                        self.init_ships()
+
+                elif self.scenes_idx == 2 and event.type == pygame.MOUSEBUTTONDOWN:
+                    result = [i for i in self.ships if i.rect.collidepoint(*event.pos)]
+                    if result:
+                        self.selected_ship = result[0]
+
+                elif self.scenes_idx == 2 and event.type == pygame.MOUSEMOTION and self.selected_ship:
+                    self.selected_ship.rect.x = event.pos[0]
+                    self.selected_ship.rect.y = event.pos[1]
+
+                elif self.scenes_idx == 2 and event.type == pygame.MOUSEBUTTONUP and self.selected_ship:
+                    self.selected_ship.rect.x = event.pos[0] // cell_size * cell_size
+                    self.selected_ship.rect.y = event.pos[1] // cell_size * cell_size
+                    if self.selected_ship.correct_coords(self.ships):
+                        self.selected_ship.prev_coords = self.selected_ship.rect.x, self.selected_ship.rect.y
+                    else:
+                        self.selected_ship.rect.x = self.selected_ship.prev_coords[0]
+                        self.selected_ship.rect.y = self.selected_ship.prev_coords[1]
+                    self.last_selected_ship = self.selected_ship
+                    self.selected_ship = None
+
+            screen.fill(0)
+
+            if self.scenes_idx < 2:
+                self.scenes[self.scenes_idx](self.scenes_idx)
+            else:
+                self.scenes[self.scenes_idx]()
+
             self.ship_group.draw(screen)
             pygame.display.flip()
+
+    def init_ships(self):
+        self.ships = [Ship(self.ship_group, 'single', 540, 210), Ship(self.ship_group, 'single', 600, 210),
+                      Ship(self.ship_group, 'single', 660, 210), Ship(self.ship_group, 'single', 720, 210),
+                      Ship(self.ship_group, 'double', 540, 270), Ship(self.ship_group, 'double', 630, 270),
+                      Ship(self.ship_group, 'double', 720, 270), Ship(self.ship_group, 'third', 540, 330),
+                      Ship(self.ship_group, 'third', 660, 330), Ship(self.ship_group, 'forth', 540, 390)]
 
     def robot_move(self):
         pass
@@ -95,7 +169,30 @@ class Game:
 
 class GameField:
     def __init__(self):
-        self.field = [[0 for j in range(10)] for i in range(10)]
+        self.field = [[None for j in range(10)] for i in range(10)]
+
+    def generate_random_field(self, ship_list):
+        for i in ship_list[::-1]:
+            i.rect.x = shift + 60 + randint(0, 9) * cell_size
+            i.rect.y = shift + 150 + randint(0, 9) * cell_size
+            if choice([True, False]):
+                i.rotate()
+            while not i.correct_coords(ship_list):
+                i.rect.x = shift + 60 + randint(0, 9) * cell_size
+                i.rect.y = shift + 150 + randint(0, 9) * cell_size
+                if choice([True, False]):
+                    i.rotate()
+
+        self.set_field(ship_list)
+
+    def set_field(self, ship_list):
+        for i in ship_list:
+            if not i.isrotated():
+                for j in range(i.ship_len()):
+                    self.field[(i.rect.y - shift - 150) // cell_size][(i.rect.x - shift - 60) // cell_size + j] = i
+            else:
+                for j in range(i.ship_len()):
+                    self.field[(i.rect.y - shift - 150) // cell_size + j][(i.rect.x - shift - 60) // cell_size] = i
 
     def make_move(self, coords):
         pass
@@ -104,18 +201,52 @@ class GameField:
 class Ship(pygame.sprite.Sprite):
     def __init__(self, group, type, x, y):
         super().__init__(group)
-        self.image = load_image(f"{type}-deck ship.png")
         self.type = type
+        self.group = group
+        self.image = load_image(f"{type}-deck ship.png")
         self.state = 'stable'
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
-
-    def get_type(self):
-        return self.type
+        self.prev_coords = (x, y)
+        self.angle = 90
 
     def get_state(self):
         return self.state
+
+    def correct_coords(self, list_ships):
+        if len([1 for i in list_ships
+                if pygame.Rect(self.rect.x - 30, self.rect.y - 30,
+                               self.rect.width + 60, self.rect.height + 60).colliderect(i.rect)]) == 1 and \
+           pygame.Rect(shift + 60, shift + 150, 300, 300).contains(self.rect):
+            return True
+        return False
+
+    def rotate(self):
+        if self.angle == 90:
+            self.image = pygame.transform.flip(
+                pygame.transform.rotate(self.image, self.angle), False, True)
+        else:
+            self.image = pygame.transform.flip(
+                pygame.transform.rotate(self.image, self.angle), True, False)
+        x, y = self.rect.x, self.rect.y
+        self.rect = self.image.get_rect()
+        self.rect.x, self.rect.y = x, y
+        self.angle = -self.angle
+
+    def ship_len(self):
+        if self.type == 'forth':
+            return 4
+        elif self.type == 'third':
+            return 3
+        elif self.type == 'double':
+            return 2
+        return 1
+
+    def isrotated(self):
+        if self.angle == 90:
+            return False
+        return True
 
 
 class Background:
@@ -130,8 +261,6 @@ class Background:
                          (shift + 810, shift + 90), 3)
 
     def draw_field(self, coord):
-        # (60, 100, 35)
-        # (450, 490, 755)
         pygame.draw.rect(screen, 'blue', (shift + coord[0], shift + 150, 300, 300), 3)
         font = pygame.font.Font(None, 30)
         for i in range(1, 11):
@@ -198,7 +327,11 @@ class Background:
         pygame.draw.rect(screen, (0, 0, 255), (80, 80, 80, 50), 5)
 
     def battle_scene(self):
-        pass
+        screen.blit(load_image("background.jpg"), (0, 0))
+        self.draw_background()
+        self.draw_field((60, 100, 35))
+        self.draw_field((450, 490, 755))
+
 
     def result_scene(self):
         pass
