@@ -1,8 +1,7 @@
 import pygame
 import os
 import sys
-from random import randint, choice, shuffle
-from time import sleep
+from random import randint, choice
 
 pygame.init()
 SIZE = 930, 600
@@ -44,7 +43,6 @@ def load_sound(name):
 class Game:
     def __init__(self):
         pygame.display.set_caption('Морской бой')
-        self.clock = pygame.time.Clock()
 
         self.background = Background()
 
@@ -69,6 +67,9 @@ class Game:
 
         self.winning_sound = pygame.mixer.Sound(load_sound('winning.wav'))
         self.defeat_sound = pygame.mixer.Sound(load_sound('defeat.wav'))
+
+        self.wait_time = None
+        self.robot_flag = None
 
     def game_loop(self):
         self.scenes[self.scenes_idx](0)
@@ -151,7 +152,7 @@ class Game:
 
                         self.flag_ship_group1 = self.flag_ship_group2 = False
                         if self.mode == 'Робот':
-                            visible_ships.add(ship_groups[0].sprites())
+                            visible_ships.add(*ship_groups[0].sprites())
 
                         self.field_idx = -1
                         self.scenes_idx += 1
@@ -192,16 +193,20 @@ class Game:
 
                 elif self.scenes_idx == 3 and event.type == pygame.MOUSEBUTTONDOWN and self.mode == '2 игрока' and \
                         ((not self.field_idx and 510 <= event.pos[0] < 810) or
-                         (self.field_idx and 120 <= event.pos[0] < 420)) and 210 <= event.pos[1] < 510 and \
-                        not self.player_move(event.pos):
+                         (self.field_idx and 120 <= event.pos[0] < 420)) and 210 <= event.pos[1] < 510:
+                    if not self.player_move(event.pos):
+                        self.field_idx = abs(self.field_idx - 1)
                     self.two_players_game_check()
-                    self.field_idx = abs(self.field_idx - 1)
 
                 elif self.scenes_idx == 3 and event.type == pygame.MOUSEBUTTONDOWN and self.mode == 'Робот' and \
-                        510 <= event.pos[0] < 810 and 210 <= event.pos[1] < 510 and not self.player_move(event.pos):
-                    self.robot_game_check()
-                    self.robot_move()
-                    self.robot_game_check()
+                        510 <= event.pos[0] < 810 and 210 <= event.pos[1] < 510:
+                    if not self.player_move(event.pos):
+                        self.robot_game_check()
+                        self.field_idx = abs(self.field_idx - 1)
+                        self.robot_move()
+                        self.field_idx = abs(self.field_idx - 1)
+                    else:
+                        self.robot_game_check()
 
             SCREEN.fill(0)
 
@@ -235,7 +240,6 @@ class Game:
         while self.fields[0].field[i][j] == 'not available':
             i, j = randint(0, 9), randint(0, 9)
         self.fields[0].make_move(i, j, (j * CELL_SIZE + 120, i * CELL_SIZE + 210), self.field_idx)
-        sleep(1)
 
     def player_move(self, coords):
         if not self.field_idx:
@@ -249,24 +253,20 @@ class Game:
             self.result = 'Игрок 2 выйграл!'
             self.winning_sound.play()
             self.scenes_idx += 1
-            sleep(2)
         elif all([True if i.state == i.ship_len() else False for i in ship_groups[1].sprites()]):
             self.result = 'Игрок 1 выйграл!'
-            self.defeat_sound.play()
+            self.winning_sound.play()
             self.scenes_idx += 1
-            sleep(2)
 
     def robot_game_check(self):
         if all([True if i.state == i.ship_len() else False for i in ship_groups[0].sprites()]):
             self.result = 'Вы проиграли.'
-            self.winning_sound.play()
+            self.defeat_sound.play()
             self.scenes_idx += 1
-            sleep(2)
         elif all([True if i.state == i.ship_len() else False for i in ship_groups[1].sprites()]):
             self.result = 'Вы выйграли!'
             self.winning_sound.play()
             self.scenes_idx += 1
-            sleep(2)
 
 
 class GameField:
@@ -320,43 +320,54 @@ class GameField:
         ship = self.field[i][j]
 
         if not field_idx:
-            xfield = (ship.rect.x - 510) // CELL_SIZE
+            jfield = (ship.rect.x - 510) // CELL_SIZE
         else:
-            xfield = (ship.rect.x - 120) // CELL_SIZE
-        yfield = (ship.rect.y - 210) // CELL_SIZE
+            jfield = (ship.rect.x - 120) // CELL_SIZE
+        ifield = (ship.rect.y - 210) // CELL_SIZE
+        print('ifield:', ifield, ';', 'jfield:', jfield)
 
         if ship.angle == 90:
             for num_cell in range(-1, ship.ship_len() + 1):
                 if self.correct_position(Shell(shell_group, ship.rect.x + CELL_SIZE * num_cell,
                                                ship.rect.y - CELL_SIZE)):
-                    self.field[yfield - 1][xfield + num_cell] = 'not available'
+                    print('1:', ifield - 1, jfield + num_cell)
+                    self.field[ifield - 1][jfield + num_cell] = 'not available'
 
                 if self.correct_position(Shell(shell_group, ship.rect.x + CELL_SIZE * num_cell,
                                                ship.rect.y + CELL_SIZE)):
-                    self.field[yfield + 1][xfield + num_cell] = 'not available'
+                    print('2:', ifield + 1, jfield + num_cell)
+                    self.field[ifield + 1][jfield + num_cell] = 'not available'
 
             if self.correct_position(Shell(shell_group, ship.rect.x + CELL_SIZE * ship.ship_len(),
                                            ship.rect.y)):
-                self.field[yfield][xfield + ship.ship_len()] = 'not available'
+                print('3:', ifield, jfield + ship.ship_len())
+                self.field[ifield][jfield + ship.ship_len()] = 'not available'
 
             if self.correct_position(Shell(shell_group, ship.rect.x - CELL_SIZE, ship.rect.y)):
-                self.field[yfield][xfield - 1] = 'not available'
+                print('4:', ifield, jfield - 1)
+                self.field[ifield][jfield - 1] = 'not available'
         else:
             for num_cell in range(-1, ship.ship_len() + 1):
                 if self.correct_position(Shell(shell_group, ship.rect.x - CELL_SIZE,
                                                ship.rect.y + CELL_SIZE * num_cell)):
-                    self.field[yfield + num_cell][xfield - 1] = 'not available'
+                    print('5:', ifield + num_cell, jfield - 1)
+                    self.field[ifield + num_cell][jfield - 1] = 'not available'
 
                 if self.correct_position(Shell(shell_group, ship.rect.x + CELL_SIZE,
                                                ship.rect.y + CELL_SIZE * num_cell)):
-                    self.field[yfield + num_cell][xfield + 1] = 'not available'
+                    print('6:', ifield + num_cell, jfield + 1)
+                    self.field[ifield + num_cell][jfield + 1] = 'not available'
 
             if self.correct_position(Shell(shell_group, ship.rect.x,
                                            ship.rect.y + CELL_SIZE * ship.ship_len())):
-                self.field[yfield + ship.ship_len()][xfield] = 'not available'
+                print('7:', ifield + ship.ship_len(), jfield)
+                self.field[ifield + ship.ship_len()][jfield] = 'not available'
 
             if self.correct_position(Shell(shell_group, ship.rect.x, ship.rect.y - CELL_SIZE)):
-                self.field[yfield - 1][xfield] = 'not available'
+                print('8:', ifield - 1, jfield)
+                self.field[ifield - 1][jfield] = 'not available'
+
+        print('--------------------')
 
     def correct_position(self, shell):
         if not pygame.Rect(SHIFT + 2 * CELL_SIZE, SHIFT + 5 * CELL_SIZE,
