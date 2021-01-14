@@ -4,16 +4,19 @@ import sys
 from random import randint, choice
 
 pygame.init()
+
 # константы
-SIZE = 930, 600
+SIZE = 1020, 690
 SCREEN = pygame.display.set_mode(SIZE)
 SHIFT = 60
 CELL_SIZE = 30
+FPS = 10
 
 # группы спрайтов
 ship_groups = [pygame.sprite.Group(), pygame.sprite.Group()]
 shell_group = pygame.sprite.Group()
 cross_group = pygame.sprite.Group()
+fire_group = pygame.sprite.Group()
 visible_ships = pygame.sprite.Group()
 
 
@@ -82,28 +85,10 @@ class Game:
         pygame.mixer.music.set_volume(0.03)
         pygame.mixer.music.play(loops=-1)
 
+        clock = pygame.time.Clock()
+
         running = True
         while running:
-
-            if self.robot_flag:
-                # небольшая задержка
-                pygame.time.delay(500)
-                # ход робота
-                if self.robot_move():
-                    # в случае попадания по кораблю даётся ещё одна попытка
-                    # проверяем кончилась ли игра с роботом
-                    self.robot_game_check()
-                else:
-                    # иначе ход даётся игроку
-                    self.field_idx = abs(self.field_idx - 1)
-                    # заперщаем роботу ходить
-                    self.robot_flag = None
-            elif self.game_over_flag:
-                # задержка
-                pygame.time.delay(2000)
-                # новая сцена
-                self.scenes_idx += 1
-                self.game_over_flag = None
 
             for event in pygame.event.get():
                 # выход
@@ -112,16 +97,16 @@ class Game:
 
                 # кнопка "Играть"
                 elif event.type == pygame.MOUSEBUTTONDOWN and self.scenes_idx == 0 and \
-                        140 <= event.pos[0] <= 370 and 350 <= event.pos[1] <= 430:
+                        (self.isbtn(event.pos[0], 140, 370) and self.isbtn(event.pos[1], 380, 460)):
                     # новая сцена
                     self.scenes_idx += 1
 
                 # выбор режима: "Робот" или "2 игрока"
                 elif self.scenes_idx == 1 and event.type == pygame.MOUSEBUTTONDOWN and \
-                        140 <= event.pos[0] <= 390 and (300 <= event.pos[1] <= 380 or
-                                                        400 <= event.pos[1] <= 480):
+                        self.isbtn(event.pos[0], 140, 390) and \
+                        (self.isbtn(event.pos[1], 330, 410) or self.isbtn(event.pos[1], 430, 510)):
                     # определяем режим
-                    if 300 <= event.pos[1] <= 380:
+                    if 330 <= event.pos[1] <= 410:
                         self.mode = 'Робот'
                     else:
                         self.mode = '2 игрока'
@@ -135,8 +120,9 @@ class Game:
 
                 # кнопка "Назад"
                 elif event.type == pygame.MOUSEBUTTONDOWN and \
-                        (self.scenes_idx == 4 or (self.scenes_idx in [2, 3] and
-                                                  80 <= event.pos[0] <= 160 and 80 <= event.pos[1] <= 130)):
+                        (self.scenes_idx == 4 or
+                         (self.scenes_idx in [2, 3] and
+                          self.isbtn(event.pos[0], 80, 160) and self.isbtn(event.pos[1], 80, 130))):
                     # возращаемся в меню
                     self.scenes_idx = 1
                     # ход первому игроку
@@ -155,7 +141,7 @@ class Game:
 
                 # кнопка "поворот"
                 elif event.type == pygame.MOUSEBUTTONDOWN and self.scenes_idx == 2 and self.last_selected_ship and\
-                        450 <= event.pos[0] <= 510 and 450 <= event.pos[1] <= 510 and \
+                        self.isbtn(event.pos[0], 500, 580) and self.isbtn(event.pos[1], 500, 580) and \
                         self.last_selected_ship.type != 'single':
                     # поворачиваем
                     self.last_selected_ship.rotate()
@@ -165,15 +151,15 @@ class Game:
 
                 # кнопка "Авто"
                 elif self.scenes_idx == 2 and event.type == pygame.MOUSEBUTTONDOWN and \
-                        560 <= event.pos[0] <= 670 and 470 <= event.pos[1] <= 520:
+                        self.isbtn(event.pos[0], 620, 730) and self.isbtn(event.pos[1], 530, 580):
                     # генерируем случайную расстановку кораблей
                     self.fields[self.field_idx].generate_random_field(ship_groups[self.field_idx].sprites())
 
                 # кнопка "Далее"
                 elif self.scenes_idx == 2 and event.type == pygame.MOUSEBUTTONDOWN and \
-                        710 <= event.pos[0] <= 825 and 470 <= event.pos[1] <= 520 and \
+                        self.isbtn(event.pos[0], 770, 885) and self.isbtn(event.pos[1], 530, 580) and \
                         not [1 for i in ship_groups[self.field_idx].sprites()
-                             if not pygame.Rect(SHIFT + 60, SHIFT + 150, 300, 300).contains(i.rect)]:
+                             if not pygame.Rect(SHIFT + 90, SHIFT + 180, 300, 300).contains(i.rect)]:
                     # для робота генерируем случайную расстановку кораблей
                     if self.mode == 'Робот':
                         self.fields[self.field_idx].generate_random_field(
@@ -184,9 +170,12 @@ class Game:
                         for i in range(len(self.fields)):
                             # расставляем экземпляры класса корабль в двумерный список
                             self.fields[i].set_field(ship_groups[i].sprites())
+                        for i in ship_groups[0].sprites():
+                            # корабли левого игрока двигаем
+                            i.rect.x += 30
                         for i in ship_groups[1].sprites():
                             # корабли правого игрока двигаем
-                            i.rect.x += 390
+                            i.rect.x += 420
 
                         self.flag_ship_group1 = self.flag_ship_group2 = False
                         if self.mode == 'Робот':
@@ -237,18 +226,19 @@ class Game:
 
                 # обработка хода для двух людей
                 elif self.scenes_idx == 3 and event.type == pygame.MOUSEBUTTONDOWN and self.mode == '2 игрока' and \
-                        ((not self.field_idx and 510 <= event.pos[0] < 810) or
-                         (self.field_idx and 120 <= event.pos[0] < 420)) and 210 <= event.pos[1] < 510:
-                    if not self.player_move(event.pos):
+                        ((not self.field_idx and self.isbtn(event.pos[0], 570, 870)) or
+                         (self.field_idx and self.isbtn(event.pos[0], 180, 480))) and\
+                        self.isbtn(event.pos[1], 240, 540):
+                    if not self.game_over_flag and not self.player_move(event.pos):
                         # если один игрок промахнулся - ход сдедующего
                         self.field_idx = abs(self.field_idx - 1)
                     # кончилась ли игра
                     self.two_players_game_check()
 
                 elif self.scenes_idx == 3 and event.type == pygame.MOUSEBUTTONDOWN and self.mode == 'Робот' and \
-                        510 <= event.pos[0] < 810 and 210 <= event.pos[1] < 510:
-                    # еслиигрок промахнулся
-                    if not self.player_move(event.pos):
+                        self.isbtn(event.pos[0], 570, 870) and self.isbtn(event.pos[1], 240, 540):
+                    # если игрок промахнулся
+                    if not self.robot_flag and not self.game_over_flag and not self.player_move(event.pos):
                         # меняем ход
                         self.field_idx = abs(self.field_idx - 1)
                         # флаг для задержки
@@ -257,36 +247,90 @@ class Game:
                         # кончилась ли игра
                         self.robot_game_check()
 
-            SCREEN.fill(0)
+            # реализация задержки
+            time_idx = 0
+            while (time_idx < 10 and self.robot_flag) or (self.game_over_flag and time_idx < 20) or \
+                    (time_idx == 0 and not self.robot_flag):
+                self.drawing_sprites()
 
-            # отрисовка сцены
-            if self.scenes_idx < 2:
-                self.background.begin_scene(self.scenes_idx)
-            elif self.scenes_idx == 2:
-                self.background.placement_of_ships_scene()
-            elif self.scenes_idx == 3:
-                self.background.battle_scene(self.mode, self.field_idx)
-                # отрисовка спрайтов кораблей в бою, снарядов, крестиков
-                visible_ships.draw(SCREEN)
-                shell_group.draw(SCREEN)
-                cross_group.draw(SCREEN)
-            elif self.scenes_idx == 4:
-                self.background.result_scene(self.result)
+                pygame.display.flip()
+                clock.tick(FPS)
+                time_idx += 1
 
-            # отрисовка спрайтов кораблей при расстановки
-            if self.flag_ship_group1:
-                ship_groups[0].draw(SCREEN)
-            if self.flag_ship_group2:
-                ship_groups[1].draw(SCREEN)
+            if self.robot_flag:
+                # ход робота
+                if self.robot_move():
+                    # в случае попадания по кораблю даётся ещё одна попытка
+                    # проверяем кончилась ли игра с роботом
+                    self.robot_game_check()
+                else:
+                    # иначе ход даётся игроку
+                    self.field_idx = abs(self.field_idx - 1)
+                    # заперщаем роботу ходить
+                    self.robot_flag = None
+            elif self.game_over_flag:
+                # новая сцена
+                self.scenes_idx += 1
+                self.game_over_flag = None
+                self.change_statistic(self.result)
 
-            pygame.display.flip()
+    def drawing_sprites(self):
+        SCREEN.fill(0)
+
+        # отрисовка сцены
+        if self.scenes_idx < 2:
+            self.background.begin_scene(self.scenes_idx)
+        elif self.scenes_idx == 2:
+            self.background.placement_of_ships_scene()
+        elif self.scenes_idx == 3:
+            self.background.battle_scene(self.mode, self.field_idx,
+                                         [self.fields[0].shoot_count, self.fields[1].shoot_count],
+                                         [self.fields[0].ships_count, self.fields[1].ships_count])
+            # отрисовка спрайтов кораблей в бою, снарядов, крестиков
+            visible_ships.draw(SCREEN)
+            shell_group.draw(SCREEN)
+            shell_group.update()
+            fire_group.draw(SCREEN)
+            fire_group.update()
+            cross_group.draw(SCREEN)
+        elif self.scenes_idx == 4:
+            self.background.result_scene(self.mode, self.result)
+
+        # отрисовка спрайтов кораблей при расстановки
+        if self.flag_ship_group1:
+            ship_groups[0].draw(SCREEN)
+        if self.flag_ship_group2:
+            ship_groups[1].draw(SCREEN)
+
+    def isbtn(self, pos, min_pos, max_pos):
+        if min_pos <= pos < max_pos:
+            return True
+        return False
 
     def init_ships(self, group):
         # иницилизация кораблей
-        for i in [['single', 540, 210], ['single', 600, 210], ['single', 660, 210], ['single', 720, 210],
-                  ['double', 540, 270], ['double', 630, 270], ['double', 720, 270], ['third', 540, 330],
-                  ['third', 660, 330], ['forth', 540, 390]]:
+        for i in [['single', 540, 240], ['single', 600, 240], ['single', 660, 240], ['single', 720, 240],
+                  ['double', 540, 300], ['double', 630, 300], ['double', 720, 300], ['third', 540, 360],
+                  ['third', 660, 360], ['forth', 540, 420]]:
             Ship(group, *i)
+
+    def change_statistic(self, text):
+        with open('data/statistic.txt', 'r') as file:
+            str_file = file.read()
+        score = [[int(j) for j in i.split(', ')] for i in str_file.split('; ')]
+        if text == 'Вы проиграли!':
+            score[0][1] += 1
+        else:
+            if self.mode == 'Робот':
+                score[0][0] += 1
+            else:
+                if '1' in text:
+                    score[1][0] += 1
+                else:
+                    score[1][1] += 1
+
+        with open('data/statistic.txt', 'w', encoding='utf-8') as file:
+            file.write('; '.join(', '.join(str(j) for j in i) for i in score))
 
     def robot_move(self):
         # случайный ход
@@ -295,14 +339,14 @@ class Game:
         while self.fields[0].field[i][j] == 'not available':
             i, j = randint(0, 9), randint(0, 9)
         # делаем ход
-        return self.fields[0].make_move(i, j, (j * CELL_SIZE + 120, i * CELL_SIZE + 210), self.field_idx)
+        return self.fields[0].make_move(i, j, (j * CELL_SIZE + 180, i * CELL_SIZE + 240), self.field_idx)
 
     def player_move(self, coords):
         # определяем координаты в матрице
         if not self.field_idx:
-            string, column = (coords[1] - 210) // CELL_SIZE, (coords[0] - 510) // CELL_SIZE
+            string, column = (coords[1] - 240) // CELL_SIZE, (coords[0] - 570) // CELL_SIZE
         else:
-            string, column = (coords[1] - 210) // CELL_SIZE, (coords[0] - 120) // CELL_SIZE
+            string, column = (coords[1] - 240) // CELL_SIZE, (coords[0] - 180) // CELL_SIZE
         # делаем ход
         return self.fields[abs(self.field_idx - 1)].make_move(string, column, coords, self.field_idx)
 
@@ -319,6 +363,11 @@ class Game:
             # делаем задержку
             self.game_over_flag = True
 
+        if self.game_over_flag:
+            visible_ships.empty()
+            for i in ship_groups:
+                visible_ships.add(*i)
+
     def robot_game_check(self):
         # если количество снесённых мачт совпадает с количеством  мачт
         if all([True if i.state == i.ship_len() else False for i in ship_groups[0].sprites()]):
@@ -332,6 +381,11 @@ class Game:
             # делаем задержку
             self.game_over_flag = True
 
+        if self.game_over_flag:
+            visible_ships.empty()
+            for i in ship_groups:
+                visible_ships.add(*i)
+
 
 class GameField:
     def __init__(self):
@@ -340,20 +394,24 @@ class GameField:
         self.shell_sound = pygame.mixer.Sound(load_sound('shell_sound.wav'))
         # звук попадания а корабль
         self.cross_sound = pygame.mixer.Sound(load_sound('cross_sound.wav'))
+        # количество выстрелов
+        self.shoot_count = 0
+        # количество оставшихся кораблей
+        self.ships_count = 10
 
     def generate_random_field(self, ship_list):
         # идём от самого большого к самому маленькому
         for i in ship_list[::-1]:
-            i.rect.x = SHIFT + 60 + randint(0, 9) * CELL_SIZE
-            i.rect.y = SHIFT + 150 + randint(0, 9) * CELL_SIZE
+            i.rect.x = SHIFT + 90 + randint(0, 9) * CELL_SIZE
+            i.rect.y = SHIFT + 180 + randint(0, 9) * CELL_SIZE
             i.prev_coords = i.rect.x, i.rect.y
             # повёрнут или нет (однопалубные корабли не поворачиваем)
             if choice([True, False]) and i.ship_len() > 1:
                 i.rotate()
             # если координаты не верны, генерируем новые
             while not i.correct_coords(ship_list):
-                i.rect.x = SHIFT + 60 + randint(0, 9) * CELL_SIZE
-                i.rect.y = SHIFT + 150 + randint(0, 9) * CELL_SIZE
+                i.rect.x = SHIFT + 90 + randint(0, 9) * CELL_SIZE
+                i.rect.y = SHIFT + 180 + randint(0, 9) * CELL_SIZE
                 i.prev_coords = i.rect.x, i.rect.y
                 # повёрнут или нет
                 if choice([True, False]) and i.ship_len() > 1:
@@ -366,24 +424,26 @@ class GameField:
             if not i.isrotated():
                 # помещаем экземпляр корабля в каждую клеточку, которую он занимает
                 for j in range(i.ship_len()):
-                    self.field[(i.rect.y - SHIFT - 150) // CELL_SIZE][(i.rect.x - SHIFT - 60) // CELL_SIZE + j] = i
+                    self.field[(i.rect.y - SHIFT - 180) // CELL_SIZE][(i.rect.x - SHIFT - 90) // CELL_SIZE + j] = i
             else:
                 for j in range(i.ship_len()):
-                    self.field[(i.rect.y - SHIFT - 150) // CELL_SIZE + j][(i.rect.x - SHIFT - 60) // CELL_SIZE] = i
+                    self.field[(i.rect.y - SHIFT - 180) // CELL_SIZE + j][(i.rect.x - SHIFT - 90) // CELL_SIZE] = i
 
     def make_move(self, i, j, coords, field_idx):
         # делаем ход
         # если в клетку ещё не был сделан ход
         if self.field[i][j] != 'not available':
+            # увеличиваем количество выстрелов
+            self.shoot_count += 1
             if not self.field[i][j]:
                 # если промахнулся
-                Shell(shell_group, coords[0] // CELL_SIZE * CELL_SIZE, coords[1] // CELL_SIZE * CELL_SIZE)
+                Shell(3, 2, coords[0] // CELL_SIZE * CELL_SIZE, coords[1] // CELL_SIZE * CELL_SIZE)
                 self.shell_sound.play()
                 # запрещаем сюда ходить
                 self.field[i][j] = 'not available'
             else:
                 # если попал
-                Cross(cross_group, coords[0] // CELL_SIZE * CELL_SIZE, coords[1] // CELL_SIZE * CELL_SIZE)
+                Fire(8, 4, coords[0] // CELL_SIZE * CELL_SIZE, coords[1] // CELL_SIZE * CELL_SIZE)
                 self.cross_sound.play()
 
                 # прибавляем к количеству снесённых мачт
@@ -394,6 +454,8 @@ class GameField:
                     self.around_the_ship(i, j, field_idx)
                     # показываем корабль
                     visible_ships.add(self.field[i][j])
+                    # уменьшаем количество оставшихся кораблей
+                    self.ships_count -= 1
                 # запрещаем сюда ходить
                 self.field[i][j] = 'not available'
 
@@ -407,12 +469,12 @@ class GameField:
 
         if not field_idx:
             # ход на левое поле
-            jfield = (ship.rect.x - 510) // CELL_SIZE
+            jfield = (ship.rect.x - 570) // CELL_SIZE
         else:
             # ход на правое поле
-            jfield = (ship.rect.x - 120) // CELL_SIZE
+            jfield = (ship.rect.x - 180) // CELL_SIZE
         # индекс строки матрицы для обоих полей одинаков
-        ifield = (ship.rect.y - 210) // CELL_SIZE
+        ifield = (ship.rect.y - 240) // CELL_SIZE
         print('ifield:', ifield, ';', 'jfield:', jfield)
 
         if not ship.isrotated():
@@ -421,47 +483,47 @@ class GameField:
                 # окружаем снарядами корабль снизу и сверху
 
                 # если снаряд не вышел за края полей не трогаем его
-                if self.correct_position(Shell(shell_group, ship.rect.x + CELL_SIZE * num_cell,
+                if self.correct_position(Cross(ship.rect.x + CELL_SIZE * num_cell,
                                                ship.rect.y - CELL_SIZE)):
                     print('1:', ifield - 1, jfield + num_cell)
                     # запрещаем туда ходить
                     self.field[ifield - 1][jfield + num_cell] = 'not available'
 
-                if self.correct_position(Shell(shell_group, ship.rect.x + CELL_SIZE * num_cell,
+                if self.correct_position(Cross(ship.rect.x + CELL_SIZE * num_cell,
                                                ship.rect.y + CELL_SIZE)):
                     print('2:', ifield + 1, jfield + num_cell)
                     self.field[ifield + 1][jfield + num_cell] = 'not available'
 
             # а затем по одному снаряду с боков
-            if self.correct_position(Shell(shell_group, ship.rect.x + CELL_SIZE * ship.ship_len(),
+            if self.correct_position(Cross(ship.rect.x + CELL_SIZE * ship.ship_len(),
                                            ship.rect.y)):
                 print('3:', ifield, jfield + ship.ship_len())
                 self.field[ifield][jfield + ship.ship_len()] = 'not available'
 
-            if self.correct_position(Shell(shell_group, ship.rect.x - CELL_SIZE, ship.rect.y)):
+            if self.correct_position(Cross(ship.rect.x - CELL_SIZE, ship.rect.y)):
                 print('4:', ifield, jfield - 1)
                 self.field[ifield][jfield - 1] = 'not available'
         else:
             # если корабль повёрнут (вертикальное положение)
             for num_cell in range(-1, ship.ship_len() + 1):
                 # окружаем снарядами корабль справа и слева
-                if self.correct_position(Shell(shell_group, ship.rect.x - CELL_SIZE,
+                if self.correct_position(Cross(ship.rect.x - CELL_SIZE,
                                                ship.rect.y + CELL_SIZE * num_cell)):
                     print('5:', ifield + num_cell, jfield - 1)
                     self.field[ifield + num_cell][jfield - 1] = 'not available'
 
-                if self.correct_position(Shell(shell_group, ship.rect.x + CELL_SIZE,
+                if self.correct_position(Cross(ship.rect.x + CELL_SIZE,
                                                ship.rect.y + CELL_SIZE * num_cell)):
                     print('6:', ifield + num_cell, jfield + 1)
                     self.field[ifield + num_cell][jfield + 1] = 'not available'
 
             # а затем по одному снаряду сверху и снизу
-            if self.correct_position(Shell(shell_group, ship.rect.x,
+            if self.correct_position(Cross(ship.rect.x,
                                            ship.rect.y + CELL_SIZE * ship.ship_len())):
                 print('7:', ifield + ship.ship_len(), jfield)
                 self.field[ifield + ship.ship_len()][jfield] = 'not available'
 
-            if self.correct_position(Shell(shell_group, ship.rect.x, ship.rect.y - CELL_SIZE)):
+            if self.correct_position(Cross(ship.rect.x, ship.rect.y - CELL_SIZE)):
                 print('8:', ifield - 1, jfield)
                 self.field[ifield - 1][jfield] = 'not available'
 
@@ -469,9 +531,9 @@ class GameField:
 
     def correct_position(self, shell):
         # если снаряд вышел за края полей
-        if not pygame.Rect(SHIFT + 2 * CELL_SIZE, SHIFT + 5 * CELL_SIZE,
+        if not pygame.Rect(SHIFT + 4 * CELL_SIZE, SHIFT + 6 * CELL_SIZE,
                            10 * CELL_SIZE, 10 * CELL_SIZE).contains(shell.rect) and \
-                not pygame.Rect(SHIFT + 15 * CELL_SIZE, SHIFT + 5 * CELL_SIZE,
+                not pygame.Rect(SHIFT + 17 * CELL_SIZE, SHIFT + 6 * CELL_SIZE,
                                 10 * CELL_SIZE, 10 * CELL_SIZE).contains(shell.rect):
             # убиваем спрайт
             shell.kill()
@@ -507,7 +569,7 @@ class Ship(pygame.sprite.Sprite):
         if len([1 for i in list_ships
                 if pygame.Rect(self.rect.x - 30, self.rect.y - 30,
                                self.rect.width + 60, self.rect.height + 60).colliderect(i.rect)]) == 1 and \
-           pygame.Rect(SHIFT + 60, SHIFT + 150, 300, 300).contains(self.rect):
+           pygame.Rect(SHIFT + 90, SHIFT + 180, 300, 300).contains(self.rect):
             return True
         return False
 
@@ -548,18 +610,66 @@ class Ship(pygame.sprite.Sprite):
 
 # снаряд
 class Shell(pygame.sprite.Sprite):
-    def __init__(self, group, x, y):
-        super().__init__(group)
-        self.image = load_image("shell.png")
+    def __init__(self, columns, rows, x, y):
+        super().__init__(shell_group)
+        self.image = load_image("shells.png")
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
 
+        self.frames = []
+        self.cut_sheet(self.image, columns, rows)
+        self.cur_frame = 0
+        self.image = self.frames[self.cur_frame]
+        self.rect = self.rect.move(x, y)
+
+    def cut_sheet(self, sheet, columns, rows):
+        self.rect = pygame.Rect(0, 0, self.image.get_width() // columns,
+                                self.image.get_height() // rows)
+        for j in range(rows):
+            for i in range(columns):
+                frame_location = (self.rect.w * i, self.rect.h * j)
+                self.frames.append(sheet.subsurface(pygame.Rect(
+                    frame_location, self.rect.size)))
+
+    def update(self):
+        self.cur_frame = (self.cur_frame + 1) % len(self.frames)
+        self.image = self.frames[self.cur_frame]
+
+
+# огонь
+class Fire(pygame.sprite.Sprite):
+    def __init__(self, columns, rows, x, y):
+        super().__init__(fire_group)
+        self.image = load_image("fire.png")
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+
+        self.frames = []
+        self.cut_sheet(self.image, columns, rows)
+        self.cur_frame = 0
+        self.image = self.frames[self.cur_frame]
+        self.rect = self.rect.move(x, y)
+
+    def cut_sheet(self, sheet, columns, rows):
+        self.rect = pygame.Rect(0, 0, self.image.get_width() // columns,
+                                self.image.get_height() // rows)
+        for j in range(rows):
+            for i in range(columns):
+                frame_location = (self.rect.w * i, self.rect.h * j)
+                self.frames.append(sheet.subsurface(pygame.Rect(
+                    frame_location, self.rect.size)))
+
+    def update(self):
+        self.cur_frame = (self.cur_frame + 1) % len(self.frames)
+        self.image = self.frames[self.cur_frame]
+
 
 # крестик
 class Cross(pygame.sprite.Sprite):
-    def __init__(self, group, x, y):
-        super().__init__(group)
+    def __init__(self, x, y):
+        super().__init__(cross_group)
         self.image = load_image("cross.png")
         self.rect = self.image.get_rect()
         self.rect.x = x
@@ -570,38 +680,38 @@ class Cross(pygame.sprite.Sprite):
 class Background:
     def draw_background(self):
         # тетрадный лист
-        pygame.draw.rect(SCREEN, 'white', (SHIFT, SHIFT, 810, 480))
-        for i in range(0, 810, CELL_SIZE):
-            for j in range(0, 480, CELL_SIZE):
+        pygame.draw.rect(SCREEN, 'white', (SHIFT, SHIFT, 900, 570))
+        for i in range(0, 900, CELL_SIZE):
+            for j in range(0, 570, CELL_SIZE):
                 pygame.draw.rect(SCREEN, (135, 206, 235),
                                  (i + SHIFT, j + SHIFT,
                                   CELL_SIZE, CELL_SIZE), 2)
-        pygame.draw.line(SCREEN, 'red', (SHIFT, SHIFT + 90),
-                         (SHIFT + 810, SHIFT + 90), 3)
+        pygame.draw.line(SCREEN, 'red', (SHIFT, SHIFT + 120),
+                         (SHIFT + 900, SHIFT + 120), 3)
 
     def draw_field(self, coord):
         # рисует поле боя
-        pygame.draw.rect(SCREEN, 'blue', (SHIFT + coord[0], SHIFT + 150, 300, 300), 3)
+        pygame.draw.rect(SCREEN, 'blue', (SHIFT + coord[0], SHIFT + 180, 300, 300), 3)
         # цифры
         font = pygame.font.Font(None, 30)
         for i in range(1, 11):
             text = font.render(str(i), True, (0, 0, 255))
             if i == 10:
                 SCREEN.blit(text, (i * CELL_SIZE + coord[1] - 5,
-                                   4 * CELL_SIZE + SHIFT + 5))
+                                   5 * CELL_SIZE + SHIFT + 5))
             else:
                 SCREEN.blit(text, (i * CELL_SIZE + coord[1],
-                                   4 * CELL_SIZE + SHIFT + 5))
+                                   5 * CELL_SIZE + SHIFT + 5))
         # буквы
         string = 'абвгдеёжзи'
         for i in range(10):
             text = font.render(string[i], True, (0, 0, 255))
             if i == 4 or i == 7:
                 SCREEN.blit(text, (SHIFT + 5 + coord[2] - 2,
-                                   (5 + i) * CELL_SIZE + SHIFT + 5))
+                                   (6 + i) * CELL_SIZE + SHIFT + 5))
             else:
                 SCREEN.blit(text, (SHIFT + 5 + coord[2],
-                                   (5 + i) * CELL_SIZE + SHIFT + 5))
+                                   (6 + i) * CELL_SIZE + SHIFT + 5))
 
     def begin_scene(self, num_scene):
         # меню игры
@@ -611,29 +721,29 @@ class Background:
         # тетрадный лист
         self.draw_background()
         # корабль
-        SCREEN.blit(load_image("menu_picture.png"), (450, 210))
-        SCREEN.blit(load_image("pen.png"), (600, -30))
+        SCREEN.blit(load_image("menu_picture.png"), (510, 240))
+        SCREEN.blit(load_image("pen.png"), (660, 0))
 
         font = pygame.font.SysFont("Segoe Print", 50)
         if num_scene == 0:
             # кнопка "Играть"
             text = font.render("Играть", True, (0, 0, 255))
-            SCREEN.blit(text, (150, 340))
-            pygame.draw.rect(SCREEN, (0, 0, 255), (140, 350, 230, 80), 5)
+            SCREEN.blit(text, (150, 370))
+            pygame.draw.rect(SCREEN, (0, 0, 255), (140, 380, 230, 80), 5)
         else:
             # кнопка "Робот"
             text = font.render("Робот", True, (0, 0, 255))
-            SCREEN.blit(text, (180, 290))
-            pygame.draw.rect(SCREEN, (0, 0, 255), (140, 300, 250, 80), 5)
+            SCREEN.blit(text, (180, 320))
+            pygame.draw.rect(SCREEN, (0, 0, 255), (140, 330, 250, 80), 5)
             # кнопка "2 игрока"
             text = font.render("2 игрока", True, (0, 0, 255))
-            SCREEN.blit(text, (150, 390))
-            pygame.draw.rect(SCREEN, (0, 0, 255), (140, 400, 250, 80), 5)
+            SCREEN.blit(text, (150, 420))
+            pygame.draw.rect(SCREEN, (0, 0, 255), (140, 430, 250, 80), 5)
 
-        font.set_bold(True)
         # название игры
+        font.set_bold(True)
         text = font.render("Морской бой", True, (0, 0, 255))
-        SCREEN.blit(text, (80, 180))
+        SCREEN.blit(text, (80, 210))
 
     def placement_of_ships_scene(self):
         # стол
@@ -641,36 +751,36 @@ class Background:
         # тетрадный лист
         self.draw_background()
         # левое поле
-        self.draw_field((60, 100, 35))
+        self.draw_field((90, 130, 65))
 
         # кнопка "Далее"
         font = pygame.font.SysFont("Segoe Print", 30)
         text = font.render("Далее", True, (0, 0, 255))
-        SCREEN.blit(text, (720, 465))
-        pygame.draw.rect(SCREEN, (0, 0, 255), (710, 470, 115, 50), 5)
+        SCREEN.blit(text, (780, 525))
+        pygame.draw.rect(SCREEN, (0, 0, 255), (770, 530, 115, 50), 5)
 
         # кнопка "Авто"
         text = font.render("Авто", True, (0, 0, 255))
-        SCREEN.blit(text, (570, 465))
-        pygame.draw.rect(SCREEN, (0, 0, 255), (560, 470, 110, 50), 5)
+        SCREEN.blit(text, (630, 525))
+        pygame.draw.rect(SCREEN, (0, 0, 255), (620, 530, 110, 50), 5)
 
         # кнопка "Поворот"
-        SCREEN.blit(load_image("reset.png"), (450, 450))
-        pygame.draw.rect(SCREEN, (0, 0, 255), (440, 440, 80, 80), 5)
+        SCREEN.blit(load_image("reset.png"), (510, 510))
+        pygame.draw.rect(SCREEN, (0, 0, 255), (500, 500, 80, 80), 5)
 
         # кнопка "Назад"
         pygame.draw.polygon(SCREEN, (0, 0, 255), ((120, 90), (90, 105), (120, 120)))
         pygame.draw.rect(SCREEN, (0, 0, 255), (120, 100, 30, 10))
         pygame.draw.rect(SCREEN, (0, 0, 255), (80, 80, 80, 50), 5)
 
-    def battle_scene(self, mode, field_idx):
+    def battle_scene(self, mode, field_idx, shoot_counts, ships_counts):
         # стол
         SCREEN.blit(load_image("background.jpg"), (0, 0))
         # тетрадный лист
         self.draw_background()
         # боевые поля
-        self.draw_field((60, 100, 35))
-        self.draw_field((450, 490, 755))
+        self.draw_field((120, 160, 95))
+        self.draw_field((510, 550, 815))
 
         # кнопка "Назад"
         pygame.draw.polygon(SCREEN, (0, 0, 255), ((120, 90), (90, 105), (120, 120)))
@@ -678,51 +788,75 @@ class Background:
         pygame.draw.rect(SCREEN, (0, 0, 255), (80, 80, 80, 50), 5)
 
         # Подписи кому пренадлежит данное поле
-        font = pygame.font.SysFont("Segoe Print", 30)
+        font = pygame.font.SysFont("Segoe Print", 35)
         if mode == 'Робот':
             text = font.render("Игрок", True, (0, 0, 255))
-            SCREEN.blit(text, (220, 80))
+            SCREEN.blit(text, (275, 551))
             text = font.render("Робот", True, (0, 0, 255))
-            SCREEN.blit(text, (610, 80))
+            SCREEN.blit(text, (660, 555))
         else:
             text = font.render("Игрок 1", True, (0, 0, 255))
-            SCREEN.blit(text, (205, 80))
+            SCREEN.blit(text, (240, 551))
             text = font.render("Игрок 2", True, (0, 0, 255))
-            SCREEN.blit(text, (595, 80))
+            SCREEN.blit(text, (660, 551))
+
+        font = pygame.font.SysFont("Segoe Print", 24)
+        text = font.render(f"Кораблей осталось: {ships_counts[0]}", True, (0, 0, 255))
+        SCREEN.blit(text, (180, 85))
+        text = font.render(f"Всего выстрелов: {shoot_counts[0]}", True, (0, 0, 255))
+        SCREEN.blit(text, (180, 141))
+        text = font.render(f"Кораблей осталось: {ships_counts[1]}", True, (0, 0, 255))
+        SCREEN.blit(text, (570, 85))
+        text = font.render(f"Всего выстрелов: {shoot_counts[1]}", True, (0, 0, 255))
+        SCREEN.blit(text, (570, 141))
 
         # смена напраления стрелки, показывающей чей сейчас ход
         if not field_idx:
-            pygame.draw.polygon(SCREEN, (0, 180, 0), ((465, 345), (495, 360), (465, 375)))
-            pygame.draw.rect(SCREEN, (0, 180, 0), (435, 355, 30, 10))
+            pygame.draw.polygon(SCREEN, (0, 180, 0), ((525, 375), (555, 390), (525, 405)))
+            pygame.draw.rect(SCREEN, (0, 180, 0), (495, 385, 30, 10))
         else:
-            pygame.draw.polygon(SCREEN, (0, 180, 0), ((465, 345), (435, 360), (465, 375)))
-            pygame.draw.rect(SCREEN, (0, 180, 0), (465, 355, 30, 10))
+            pygame.draw.polygon(SCREEN, (0, 180, 0), ((525, 375), (495, 390), (525, 405)))
+            pygame.draw.rect(SCREEN, (0, 180, 0), (525, 385, 30, 10))
 
-    def result_scene(self, text):
+    def result_scene(self, mode, text):
         # результаты игры
         SCREEN.blit(load_image("background.jpg"), (0, 0))
         # тетрадный лист
         self.draw_background()
 
+        with open('data/statistic.txt', 'r') as file:
+            str_file = file.read()
+        score = [[int(j) for j in i.split(', ')] for i in str_file.split('; ')]
+
         # фоновое изображение
         if text == 'Вы проиграли!':
-            SCREEN.blit(load_image("defeat.png"), (480, 150))
+            SCREEN.blit(load_image("defeat.png"), (570, 210))
         else:
-            SCREEN.blit(load_image("winning.png"), (480, 210))
+            SCREEN.blit(load_image("winning.png"), (570, 270))
 
         # результат
         font = pygame.font.SysFont("Segoe Print", 35)
         font.set_bold(True)
         text = font.render(text, True, (0, 0, 255))
-        SCREEN.blit(text, (90, 195))
+        SCREEN.blit(text, (120, 255))
 
         # подсказка
         font = pygame.font.SysFont("Segoe Print", 30)
         text = font.render('Кликните, чтобы', True, (0, 0, 255))
-        SCREEN.blit(text, (90, 290))
+        SCREEN.blit(text, (150, 350))
         text = font.render('продолжить.', True, (0, 0, 255))
-        SCREEN.blit(text, (120, 350))
+        SCREEN.blit(text, (180, 410))
 
+        if mode == 'Робот':
+            text = font.render(f'Робот: {score[0][0]}', True, (0, 0, 255))
+            SCREEN.blit(text, (90, 90))
+            text = font.render(f'Игрок: {score[0][1]}', True, (0, 0, 255))
+            SCREEN.blit(text, (400, 90))
+        else:
+            text = font.render(f'Игрок1: {score[1][0]}', True, (0, 0, 255))
+            SCREEN.blit(text, (90, 90))
+            text = font.render(f'Игрок2: {score[1][1]}', True, (0, 0, 255))
+            SCREEN.blit(text, (400, 90))
 
 def main():
     if __name__ == '__main__':
