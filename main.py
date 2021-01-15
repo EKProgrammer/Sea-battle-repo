@@ -73,11 +73,20 @@ class Game:
         # загрузка музыки для окончания игры
         self.winning_sound = pygame.mixer.Sound(load_sound('winning.wav'))
         self.defeat_sound = pygame.mixer.Sound(load_sound('defeat.wav'))
+        # проверка наличия текстового файла
+        if not os.path.isfile('data/statistic.txt'):
+            print(f"Текстовый файл 'statistic.txt' не найден")
+            sys.exit()
 
         # флаг используется для реализации задержки хода робота
         self.robot_flag = None
         # флаг используется для реализации задержки после последнего хода
         self.game_over_flag = None
+
+        self.letter_keys = [pygame.K_f, pygame.K_COMMA, pygame.K_d, pygame.K_u, pygame.K_l,
+                            pygame.K_t, pygame.K_BACKQUOTE, pygame.K_SEMICOLON, pygame.K_p, pygame.K_b]
+        self.number_keys = [pygame.K_0, pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4,
+                            pygame.K_5, pygame.K_6, pygame.K_7, pygame.K_8, pygame.K_9]
 
     def game_loop(self):
         # фоновая музыка
@@ -96,7 +105,7 @@ class Game:
                     running = False
 
                 # кнопка "Играть"
-                elif event.type == pygame.MOUSEBUTTONDOWN and self.scenes_idx == 0 and \
+                elif self.scenes_idx == 0 and event.type == pygame.MOUSEBUTTONDOWN and \
                         (self.isbtn(event.pos[0], 140, 370) and self.isbtn(event.pos[1], 380, 460)):
                     # новая сцена
                     self.scenes_idx += 1
@@ -105,43 +114,21 @@ class Game:
                 elif self.scenes_idx == 1 and event.type == pygame.MOUSEBUTTONDOWN and \
                         self.isbtn(event.pos[0], 140, 390) and \
                         (self.isbtn(event.pos[1], 330, 410) or self.isbtn(event.pos[1], 430, 510)):
-                    # определяем режим
-                    if 330 <= event.pos[1] <= 410:
-                        self.mode = 'Робот'
-                    else:
-                        self.mode = '2 игрока'
-                    # новая сцена
-                    self.scenes_idx += 1
-                    # иницилизация кораблей
-                    self.init_ships(ship_groups[0])
-                    self.init_ships(ship_groups[1])
-                    #  показываем первую группу
-                    self.flag_ship_group1 = True
+                    self.set_mode(event)
 
                 # кнопка "Назад"
-                elif event.type == pygame.MOUSEBUTTONDOWN and \
-                        (self.scenes_idx == 4 or
-                         (self.scenes_idx in [2, 3] and
-                          self.isbtn(event.pos[0], 80, 160) and self.isbtn(event.pos[1], 80, 130))):
-                    # возращаемся в меню
-                    self.scenes_idx = 1
-                    # ход первому игроку
-                    self.field_idx = 0
-                    # новые поля
-                    self.fields = [GameField(), GameField()]
-                    # очищаем группы
-                    for i in ship_groups:
-                        i.empty()
-                    shell_group.empty()
-                    cross_group.empty()
-                    visible_ships.empty()
-                    # запрещаем показывать корабли
-                    self.flag_ship_group1 = False
-                    self.flag_ship_group2 = False
+                elif (self.scenes_idx in [2, 3] and event.type == pygame.KEYDOWN and event.key == pygame.K_b) or \
+                        (event.type == pygame.MOUSEBUTTONDOWN and
+                         (self.scenes_idx == 4 or
+                          (self.scenes_idx in [2, 3] and self.isbtn(event.pos[0], 80, 160) and
+                           self.isbtn(event.pos[1], 80, 130)))):
+                    self.back()
 
                 # кнопка "поворот"
-                elif event.type == pygame.MOUSEBUTTONDOWN and self.scenes_idx == 2 and self.last_selected_ship and\
-                        self.isbtn(event.pos[0], 500, 580) and self.isbtn(event.pos[1], 500, 580) and \
+                elif self.scenes_idx == 2 and self.last_selected_ship and \
+                        ((event.type == pygame.KEYDOWN and event.key == pygame.K_r) or
+                         (event.type == pygame.MOUSEBUTTONDOWN and self.isbtn(event.pos[0], 500, 580) and
+                          self.isbtn(event.pos[1], 500, 580))) and \
                         self.last_selected_ship.type != 'single':
                     # поворачиваем
                     self.last_selected_ship.rotate()
@@ -150,8 +137,10 @@ class Game:
                         self.last_selected_ship.rotate()
 
                 # кнопка "Авто"
-                elif self.scenes_idx == 2 and event.type == pygame.MOUSEBUTTONDOWN and \
-                        self.isbtn(event.pos[0], 620, 730) and self.isbtn(event.pos[1], 530, 580):
+                elif self.scenes_idx == 2 and \
+                        ((event.type == pygame.KEYDOWN and event.key == pygame.K_a) or
+                         (event.type == pygame.MOUSEBUTTONDOWN and self.isbtn(event.pos[0], 620, 730) and
+                          self.isbtn(event.pos[1], 530, 580))):
                     # генерируем случайную расстановку кораблей
                     self.fields[self.field_idx].generate_random_field(ship_groups[self.field_idx].sprites())
 
@@ -160,39 +149,7 @@ class Game:
                         self.isbtn(event.pos[0], 770, 885) and self.isbtn(event.pos[1], 530, 580) and \
                         not [1 for i in ship_groups[self.field_idx].sprites()
                              if not pygame.Rect(SHIFT + 90, SHIFT + 180, 300, 300).contains(i.rect)]:
-                    # для робота генерируем случайную расстановку кораблей
-                    if self.mode == 'Робот':
-                        self.fields[self.field_idx].generate_random_field(
-                            ship_groups[self.field_idx + 1].sprites())
-
-                    if self.mode == 'Робот' or self.field_idx == 1:
-                        # если это последняя сцена перед боем
-                        for i in range(len(self.fields)):
-                            # расставляем экземпляры класса корабль в двумерный список
-                            self.fields[i].set_field(ship_groups[i].sprites())
-                        for i in ship_groups[0].sprites():
-                            # корабли левого игрока двигаем
-                            i.rect.x += 30
-                        for i in ship_groups[1].sprites():
-                            # корабли правого игрока двигаем
-                            i.rect.x += 420
-
-                        self.flag_ship_group1 = self.flag_ship_group2 = False
-                        if self.mode == 'Робот':
-                            # добавляем в группу видимых спрайтов корабли игрока
-                            # если режим игры робот
-                            visible_ships.add(*ship_groups[0].sprites())
-
-                        self.field_idx = -1
-                        # новая сцена
-                        self.scenes_idx += 1
-                    else:
-                        # если это не последняя сцена перед боем
-                        # рисуем корабли второй группы
-                        self.flag_ship_group1 = False
-                        self.flag_ship_group2 = True
-                    # следующее поле
-                    self.field_idx += 1
+                    self.preparation_for_battle()
 
                 # взятие корабля
                 elif self.scenes_idx == 2 and event.type == pygame.MOUSEBUTTONDOWN:
@@ -202,27 +159,17 @@ class Game:
                     if result:
                         # фиксируем это в переменной
                         self.selected_ship = result[0]
+                        self.move_coords = event.pos
 
                 # перемещение корабля
                 elif self.scenes_idx == 2 and event.type == pygame.MOUSEMOTION and self.selected_ship:
-                    self.selected_ship.rect.x = event.pos[0]
-                    self.selected_ship.rect.y = event.pos[1]
+                    self.selected_ship.rect.x += event.pos[0] - self.move_coords[0]
+                    self.selected_ship.rect.y += event.pos[1] - self.move_coords[1]
+                    self.move_coords = event.pos
 
                 # отпускание корабля
                 elif self.scenes_idx == 2 and event.type == pygame.MOUSEBUTTONUP and self.selected_ship:
-                    # ставим корабль точно в клетки
-                    self.selected_ship.rect.x = event.pos[0] // CELL_SIZE * CELL_SIZE
-                    self.selected_ship.rect.y = event.pos[1] // CELL_SIZE * CELL_SIZE
-                    if self.selected_ship.correct_coords(ship_groups[self.field_idx].sprites()):
-                        # если координаты корабля верные, сохраняем их
-                        self.selected_ship.prev_coords = self.selected_ship.rect.x, self.selected_ship.rect.y
-                    else:
-                        # если нет, меняем на предыдущие
-                        self.selected_ship.rect.x = self.selected_ship.prev_coords[0]
-                        self.selected_ship.rect.y = self.selected_ship.prev_coords[1]
-                    self.last_selected_ship = self.selected_ship
-                    # корабль больше не следует за стрелкой миши
-                    self.selected_ship = None
+                    self.put_ship()
 
                 # обработка хода для двух людей
                 elif self.scenes_idx == 3 and event.type == pygame.MOUSEBUTTONDOWN and self.mode == '2 игрока' and \
@@ -247,6 +194,12 @@ class Game:
                         # кончилась ли игра
                         self.robot_game_check()
 
+                # ход с помощью клавиатуры
+                elif self.scenes_idx == 3 and \
+                        [i for i in pygame.key.get_pressed() if i in self.letter_keys] and \
+                        [i for i in pygame.key.get_pressed() if i in self.number_keys]:
+                    pass
+
             # реализация задержки
             time_idx = 0
             while (time_idx < 10 and self.robot_flag) or (self.game_over_flag and time_idx < 20) or \
@@ -257,22 +210,7 @@ class Game:
                 clock.tick(FPS)
                 time_idx += 1
 
-            if self.robot_flag:
-                # ход робота
-                if self.robot_move():
-                    # в случае попадания по кораблю даётся ещё одна попытка
-                    # проверяем кончилась ли игра с роботом
-                    self.robot_game_check()
-                else:
-                    # иначе ход даётся игроку
-                    self.field_idx = abs(self.field_idx - 1)
-                    # заперщаем роботу ходить
-                    self.robot_flag = None
-            elif self.game_over_flag:
-                # новая сцена
-                self.scenes_idx += 1
-                self.game_over_flag = None
-                self.change_statistic(self.result)
+            self.frezzing()
 
     def drawing_sprites(self):
         SCREEN.fill(0)
@@ -282,6 +220,8 @@ class Game:
             self.background.begin_scene(self.scenes_idx)
         elif self.scenes_idx == 2:
             self.background.placement_of_ships_scene()
+            if self.last_selected_ship:
+                pygame.draw.rect(SCREEN, (255, 0, 0), self.last_selected_ship.rect, 3)
         elif self.scenes_idx == 3:
             self.background.battle_scene(self.mode, self.field_idx,
                                          [self.fields[0].shoot_count, self.fields[1].shoot_count],
@@ -315,10 +255,12 @@ class Game:
             Ship(group, *i)
 
     def change_statistic(self, text):
+        # изменение статистики
         with open('data/statistic.txt', 'r') as file:
             str_file = file.read()
+
         score = [[int(j) for j in i.split(', ')] for i in str_file.split('; ')]
-        if text == 'Вы проиграли!':
+        if text == 'Вы проиграли.':
             score[0][1] += 1
         else:
             if self.mode == 'Робот':
@@ -331,6 +273,108 @@ class Game:
 
         with open('data/statistic.txt', 'w', encoding='utf-8') as file:
             file.write('; '.join(', '.join(str(j) for j in i) for i in score))
+
+    def frezzing(self):
+        if self.robot_flag:
+            # ход робота
+            if self.robot_move():
+                # в случае попадания по кораблю даётся ещё одна попытка
+                # проверяем кончилась ли игра с роботом
+                self.robot_game_check()
+            else:
+                # иначе ход даётся игроку
+                self.field_idx = abs(self.field_idx - 1)
+                # заперщаем роботу ходить
+                self.robot_flag = None
+        elif self.game_over_flag:
+            # новая сцена
+            self.scenes_idx += 1
+            self.game_over_flag = None
+            self.change_statistic(self.result)
+
+    def put_ship(self):
+        # ставим корабль точно в клетки
+        self.selected_ship.rect.x = round(self.selected_ship.rect.x / CELL_SIZE) * CELL_SIZE
+        self.selected_ship.rect.y = round(self.selected_ship.rect.y / CELL_SIZE) * CELL_SIZE
+        if self.selected_ship.correct_coords(ship_groups[self.field_idx].sprites()):
+            # если координаты корабля верные, сохраняем их
+            self.selected_ship.prev_coords = self.selected_ship.rect.x, self.selected_ship.rect.y
+        else:
+            # если нет, меняем на предыдущие
+            self.selected_ship.rect.x = self.selected_ship.prev_coords[0]
+            self.selected_ship.rect.y = self.selected_ship.prev_coords[1]
+        self.last_selected_ship = self.selected_ship
+        # корабль больше не следует за стрелкой миши
+        self.selected_ship = None
+
+    def preparation_for_battle(self):
+        # для робота генерируем случайную расстановку кораблей
+        if self.mode == 'Робот':
+            self.fields[self.field_idx].generate_random_field(ship_groups[self.field_idx + 1].sprites())
+
+        if self.mode == 'Робот' or self.field_idx == 1:
+            # если это последняя сцена перед боем
+            for i in range(len(self.fields)):
+                # расставляем экземпляры класса корабль в двумерный список
+                self.fields[i].set_field(ship_groups[i].sprites())
+            for i in ship_groups[0].sprites():
+                # корабли левого игрока двигаем
+                i.rect.x += 30
+            for i in ship_groups[1].sprites():
+                # корабли правого игрока двигаем
+                i.rect.x += 420
+
+            self.flag_ship_group1 = self.flag_ship_group2 = False
+            if self.mode == 'Робот':
+                # добавляем в группу видимых спрайтов корабли игрока
+                # если режим игры робот
+                visible_ships.add(*ship_groups[0].sprites())
+
+            self.field_idx = -1
+            # новая сцена
+            self.scenes_idx += 1
+        else:
+            # если это не последняя сцена перед боем
+            # рисуем корабли второй группы
+            self.flag_ship_group1 = False
+            self.flag_ship_group2 = True
+        # следующее поле
+        self.field_idx += 1
+
+    def back(self):
+        # возращаемся в меню
+        self.scenes_idx = 1
+        # ход первому игроку
+        self.field_idx = 0
+        # новые поля
+        self.fields = [GameField(), GameField()]
+        # очищаем группы
+        for i in ship_groups:
+            i.empty()
+        shell_group.empty()
+        cross_group.empty()
+        fire_group.empty()
+        visible_ships.empty()
+        # запрещаем показывать корабли
+        self.flag_ship_group1 = False
+        self.flag_ship_group2 = False
+
+        self.last_selected_ship = None
+        self.selected_ship = None
+
+    def set_mode(self, event):
+        # определяем режим
+        if self.isbtn(event.pos[1], 330, 410):
+            self.mode = 'Робот'
+        else:
+            self.mode = '2 игрока'
+        # новая сцена
+        self.scenes_idx += 1
+        # иницилизация кораблей
+        self.init_ships(ship_groups[0])
+        self.init_ships(ship_groups[1])
+        #  показываем первую группу
+        self.flag_ship_group1 = True
 
     def robot_move(self):
         # случайный ход
@@ -848,15 +892,16 @@ class Background:
         SCREEN.blit(text, (180, 410))
 
         if mode == 'Робот':
-            text = font.render(f'Робот: {score[0][0]}', True, (0, 0, 255))
+            text = font.render(f'Игрок: {score[0][0]}', True, (0, 0, 255))
             SCREEN.blit(text, (90, 90))
-            text = font.render(f'Игрок: {score[0][1]}', True, (0, 0, 255))
-            SCREEN.blit(text, (400, 90))
+            text = font.render(f'Робот: {score[0][1]}', True, (0, 0, 255))
+            SCREEN.blit(text, (420, 90))
         else:
-            text = font.render(f'Игрок1: {score[1][0]}', True, (0, 0, 255))
+            text = font.render(f'Игрок 1: {score[1][0]}', True, (0, 0, 255))
             SCREEN.blit(text, (90, 90))
-            text = font.render(f'Игрок2: {score[1][1]}', True, (0, 0, 255))
-            SCREEN.blit(text, (400, 90))
+            text = font.render(f'Игрок 2: {score[1][1]}', True, (0, 0, 255))
+            SCREEN.blit(text, (420, 90))
+
 
 def main():
     if __name__ == '__main__':
