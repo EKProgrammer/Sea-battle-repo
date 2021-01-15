@@ -98,7 +98,7 @@ class Game:
 
         running = True
         while running:
-
+            mods = pygame.key.get_mods()
             for event in pygame.event.get():
                 # выход
                 if event.type == pygame.QUIT:
@@ -117,7 +117,8 @@ class Game:
                     self.set_mode(event)
 
                 # кнопка "Назад"
-                elif (self.scenes_idx in [2, 3] and event.type == pygame.KEYDOWN and event.key == pygame.K_b) or \
+                elif (self.scenes_idx in [2, 3] and mods & pygame.KMOD_CTRL and
+                      event.type == pygame.KEYDOWN and event.key == pygame.K_b) or \
                         (event.type == pygame.MOUSEBUTTONDOWN and
                          (self.scenes_idx == 4 or
                           (self.scenes_idx in [2, 3] and self.isbtn(event.pos[0], 80, 160) and
@@ -126,7 +127,7 @@ class Game:
 
                 # кнопка "поворот"
                 elif self.scenes_idx == 2 and self.last_selected_ship and \
-                        ((event.type == pygame.KEYDOWN and event.key == pygame.K_r) or
+                        ((mods & pygame.KMOD_CTRL and event.type == pygame.KEYDOWN and event.key == pygame.K_r) or
                          (event.type == pygame.MOUSEBUTTONDOWN and self.isbtn(event.pos[0], 500, 580) and
                           self.isbtn(event.pos[1], 500, 580))) and \
                         self.last_selected_ship.type != 'single':
@@ -138,15 +139,17 @@ class Game:
 
                 # кнопка "Авто"
                 elif self.scenes_idx == 2 and \
-                        ((event.type == pygame.KEYDOWN and event.key == pygame.K_a) or
+                        ((mods & pygame.KMOD_CTRL and event.type == pygame.KEYDOWN and event.key == pygame.K_a) or
                          (event.type == pygame.MOUSEBUTTONDOWN and self.isbtn(event.pos[0], 620, 730) and
                           self.isbtn(event.pos[1], 530, 580))):
                     # генерируем случайную расстановку кораблей
                     self.fields[self.field_idx].generate_random_field(ship_groups[self.field_idx].sprites())
 
                 # кнопка "Далее"
-                elif self.scenes_idx == 2 and event.type == pygame.MOUSEBUTTONDOWN and \
-                        self.isbtn(event.pos[0], 770, 885) and self.isbtn(event.pos[1], 530, 580) and \
+                elif self.scenes_idx == 2 and \
+                        ((mods & pygame.KMOD_CTRL and event.type == pygame.KEYDOWN and event.key == pygame.K_n) or
+                         (event.type == pygame.MOUSEBUTTONDOWN and self.isbtn(event.pos[0], 770, 885) and
+                          self.isbtn(event.pos[1], 530, 580))) and \
                         not [1 for i in ship_groups[self.field_idx].sprites()
                              if not pygame.Rect(SHIFT + 90, SHIFT + 180, 300, 300).contains(i.rect)]:
                     self.preparation_for_battle()
@@ -529,23 +532,19 @@ class GameField:
                 # если снаряд не вышел за края полей не трогаем его
                 if self.correct_position(Cross(ship.rect.x + CELL_SIZE * num_cell,
                                                ship.rect.y - CELL_SIZE)):
-                    print('1:', ifield - 1, jfield + num_cell)
                     # запрещаем туда ходить
                     self.field[ifield - 1][jfield + num_cell] = 'not available'
 
                 if self.correct_position(Cross(ship.rect.x + CELL_SIZE * num_cell,
                                                ship.rect.y + CELL_SIZE)):
-                    print('2:', ifield + 1, jfield + num_cell)
                     self.field[ifield + 1][jfield + num_cell] = 'not available'
 
             # а затем по одному снаряду с боков
             if self.correct_position(Cross(ship.rect.x + CELL_SIZE * ship.ship_len(),
                                            ship.rect.y)):
-                print('3:', ifield, jfield + ship.ship_len())
                 self.field[ifield][jfield + ship.ship_len()] = 'not available'
 
             if self.correct_position(Cross(ship.rect.x - CELL_SIZE, ship.rect.y)):
-                print('4:', ifield, jfield - 1)
                 self.field[ifield][jfield - 1] = 'not available'
         else:
             # если корабль повёрнут (вертикальное положение)
@@ -553,25 +552,19 @@ class GameField:
                 # окружаем снарядами корабль справа и слева
                 if self.correct_position(Cross(ship.rect.x - CELL_SIZE,
                                                ship.rect.y + CELL_SIZE * num_cell)):
-                    print('5:', ifield + num_cell, jfield - 1)
                     self.field[ifield + num_cell][jfield - 1] = 'not available'
 
                 if self.correct_position(Cross(ship.rect.x + CELL_SIZE,
                                                ship.rect.y + CELL_SIZE * num_cell)):
-                    print('6:', ifield + num_cell, jfield + 1)
                     self.field[ifield + num_cell][jfield + 1] = 'not available'
 
             # а затем по одному снаряду сверху и снизу
             if self.correct_position(Cross(ship.rect.x,
                                            ship.rect.y + CELL_SIZE * ship.ship_len())):
-                print('7:', ifield + ship.ship_len(), jfield)
                 self.field[ifield + ship.ship_len()][jfield] = 'not available'
 
             if self.correct_position(Cross(ship.rect.x, ship.rect.y - CELL_SIZE)):
-                print('8:', ifield - 1, jfield)
                 self.field[ifield - 1][jfield] = 'not available'
-
-        print('--------------------')
 
     def correct_position(self, shell):
         # если снаряд вышел за края полей
