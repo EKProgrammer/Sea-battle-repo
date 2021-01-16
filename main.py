@@ -265,14 +265,12 @@ class Game:
         score = [[int(j) for j in i.split(', ')] for i in str_file.split('; ')]
         if text == 'Вы проиграли.':
             score[0][1] += 1
+        elif self.mode == 'Робот':
+            score[0][0] += 1
+        elif '1' in text:
+            score[1][0] += 1
         else:
-            if self.mode == 'Робот':
-                score[0][0] += 1
-            else:
-                if '1' in text:
-                    score[1][0] += 1
-                else:
-                    score[1][1] += 1
+            score[1][1] += 1
 
         with open('data/statistic.txt', 'w', encoding='utf-8') as file:
             file.write('; '.join(', '.join(str(j) for j in i) for i in score))
@@ -522,7 +520,6 @@ class GameField:
             jfield = (ship.rect.x - 180) // CELL_SIZE
         # индекс строки матрицы для обоих полей одинаков
         ifield = (ship.rect.y - 240) // CELL_SIZE
-        print('ifield:', ifield, ';', 'jfield:', jfield)
 
         if not ship.isrotated():
             # если корабль не повёрнут (горизонтальное положение)
