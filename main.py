@@ -83,11 +83,6 @@ class Game:
         # флаг используется для реализации задержки после последнего хода
         self.game_over_flag = None
 
-        self.letter_keys = [pygame.K_f, pygame.K_COMMA, pygame.K_d, pygame.K_u, pygame.K_l,
-                            pygame.K_t, pygame.K_BACKQUOTE, pygame.K_SEMICOLON, pygame.K_p, pygame.K_b]
-        self.number_keys = [pygame.K_0, pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4,
-                            pygame.K_5, pygame.K_6, pygame.K_7, pygame.K_8, pygame.K_9]
-
     def game_loop(self):
         # фоновая музыка
         pygame.mixer.music.load(load_sound('soundtrack.wav'))
@@ -101,7 +96,9 @@ class Game:
             mods = pygame.key.get_mods()
             for event in pygame.event.get():
                 # выход
-                if event.type == pygame.QUIT:
+                if event.type == pygame.QUIT or \
+                        (event.type == pygame.MOUSEBUTTONDOWN and
+                         self.isbtn(event.pos[0], 900, 955) and self.isbtn(event.pos[1], 570, 625)):
                     running = False
 
                 # кнопка "Играть"
@@ -197,12 +194,6 @@ class Game:
                         # кончилась ли игра
                         self.robot_game_check()
 
-                # ход с помощью клавиатуры
-                elif self.scenes_idx == 3 and \
-                        [i for i in pygame.key.get_pressed() if i in self.letter_keys] and \
-                        [i for i in pygame.key.get_pressed() if i in self.number_keys]:
-                    pass
-
             # реализация задержки
             time_idx = 0
             while (time_idx < 10 and self.robot_flag) or (self.game_over_flag and time_idx < 20) or \
@@ -222,7 +213,7 @@ class Game:
         if self.scenes_idx < 2:
             self.background.begin_scene(self.scenes_idx)
         elif self.scenes_idx == 2:
-            self.background.placement_of_ships_scene()
+            self.background.placement_of_ships_scene(self.field_idx, self.mode)
             if self.last_selected_ship:
                 pygame.draw.rect(SCREEN, (255, 0, 0), self.last_selected_ship.rect, 3)
         elif self.scenes_idx == 3:
@@ -244,6 +235,10 @@ class Game:
             ship_groups[0].draw(SCREEN)
         if self.flag_ship_group2:
             ship_groups[1].draw(SCREEN)
+
+        pygame.draw.rect(SCREEN, (0, 0, 255), (900, 570, 55, 55), 5)
+        pygame.draw.line(SCREEN, (255, 0, 0), (910, 575), (945, 620), 10)
+        pygame.draw.line(SCREEN, (255, 0, 0), (910, 620), (945, 575), 10)
 
     def isbtn(self, pos, min_pos, max_pos):
         if min_pos <= pos < max_pos:
@@ -339,6 +334,7 @@ class Game:
             # рисуем корабли второй группы
             self.flag_ship_group1 = False
             self.flag_ship_group2 = True
+            self.last_selected_ship = None
         # следующее поле
         self.field_idx += 1
 
@@ -657,6 +653,8 @@ class Shell(pygame.sprite.Sprite):
         self.image = self.frames[self.cur_frame]
         self.rect = self.rect.move(x, y)
 
+        self.time_idx = 0
+
     def cut_sheet(self, sheet, columns, rows):
         self.rect = pygame.Rect(0, 0, self.image.get_width() // columns,
                                 self.image.get_height() // rows)
@@ -667,8 +665,10 @@ class Shell(pygame.sprite.Sprite):
                     frame_location, self.rect.size)))
 
     def update(self):
-        self.cur_frame = (self.cur_frame + 1) % len(self.frames)
-        self.image = self.frames[self.cur_frame]
+        if self.time_idx < 12:
+            self.cur_frame = (self.cur_frame + 1) % len(self.frames)
+            self.image = self.frames[self.cur_frame]
+            self.time_idx += 1
 
 
 # огонь
@@ -779,7 +779,7 @@ class Background:
         text = font.render("Морской бой", True, (0, 0, 255))
         SCREEN.blit(text, (80, 210))
 
-    def placement_of_ships_scene(self):
+    def placement_of_ships_scene(self, field_idx, mode):
         # стол
         SCREEN.blit(load_image("background.jpg"), (0, 0))
         # тетрадный лист
@@ -806,6 +806,15 @@ class Background:
         pygame.draw.polygon(SCREEN, (0, 0, 255), ((120, 90), (90, 105), (120, 120)))
         pygame.draw.rect(SCREEN, (0, 0, 255), (120, 100, 30, 10))
         pygame.draw.rect(SCREEN, (0, 0, 255), (80, 80, 80, 50), 5)
+
+        if not field_idx:
+            if mode == 'Робот':
+                text = font.render('Игрок', True, (0, 0, 255))
+            else:
+                text = font.render('Игрок 1', True, (0, 0, 255))
+        else:
+            text = font.render('Игрок 2', True, (0, 0, 255))
+        SCREEN.blit(text, (460, 90))
 
     def battle_scene(self, mode, field_idx, shoot_counts, ships_counts):
         # стол
