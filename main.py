@@ -228,6 +228,11 @@ class Game:
                         # кончилась ли игра
                         self.robot_game_check()
 
+                if event.type == pygame.MOUSEMOTION or \
+                        event.type == pygame.MOUSEBUTTONDOWN:
+                    # проверка подсветки на кнопках
+                    self.check_button_light(event)
+
             # реализация задержки
             time_idx = 0
             while (time_idx < 10 and self.robot_flag) or \
@@ -281,6 +286,94 @@ class Game:
         if min_pos <= pos < max_pos:
             return True
         return False
+
+    def check_button_light(self, event):
+        # кнопка "Выход"
+        if self.isbtn(event.pos[0], 885, 945) and \
+                self.isbtn(event.pos[1], 555, 615):
+            self.background.set_button_lighted((885, 555, 60, 60))
+
+        # кнопка "Играть"
+        elif self.scenes_idx == 0 and \
+                (self.isbtn(event.pos[0], 140, 370) and
+                 self.isbtn(event.pos[1], 380, 460)):
+            self.background.set_button_lighted((140, 380, 230, 80))
+
+        # кнопка "Робот"
+        elif self.scenes_idx == 1 and \
+                self.isbtn(event.pos[0], 140, 390) and \
+                self.isbtn(event.pos[1], 330, 410):
+            self.background.set_button_lighted((140, 330, 250, 80))
+
+        # кнопка "2 игрока"
+        elif self.scenes_idx == 1 and \
+                self.isbtn(event.pos[0], 140, 390) and \
+                self.isbtn(event.pos[1], 430, 510):
+            self.background.set_button_lighted((140, 430, 250, 80))
+
+        # кнопка "Назад"
+        elif self.scenes_idx in [2, 3] and \
+                self.isbtn(event.pos[0], 80, 160) and \
+                self.isbtn(event.pos[1], 80, 130):
+            self.background.set_button_lighted((80, 80, 80, 50))
+
+        # кнопка "Поворот"
+        elif self.scenes_idx == 2 and \
+                self.isbtn(event.pos[0], 470, 550) and \
+                self.isbtn(event.pos[1], 500, 580):
+            self.background.set_button_lighted((470, 500, 80, 80))
+
+        # кнопка "Авто"
+        elif self.scenes_idx == 2 and \
+                self.isbtn(event.pos[0], 590, 700) and \
+                self.isbtn(event.pos[1], 500, 550):
+            self.background.set_button_lighted((590, 500, 110, 50))
+
+        # кнопка "Далее"
+        elif self.scenes_idx == 2 and \
+                self.isbtn(event.pos[0], 740, 855) and \
+                self.isbtn(event.pos[1], 500, 550):
+            self.background.set_button_lighted((740, 500, 115, 50))
+
+        # клетки поля
+        # проверка первого поля
+        elif self.scenes_idx == 3 and self.mode == '2 игрока' and \
+                self.field_idx == 1 and \
+                self.isbtn(event.pos[0], SHIFT + CELL_SIZE * 4,
+                           SHIFT + CELL_SIZE * 14) and \
+                self.isbtn(event.pos[1], SHIFT + CELL_SIZE * 6,
+                           SHIFT + CELL_SIZE * 16):
+            # позиция в матрице
+            posx = (event.pos[0] - SHIFT) // CELL_SIZE - 4
+            posy = (event.pos[1] - SHIFT) // CELL_SIZE - 6
+            # возможен ли ход в эту клетку
+            if self.fields[0].field[posy][posx] != 'not available':
+                self.background.set_button_lighted(
+                    (SHIFT + (posx + 4) * CELL_SIZE,
+                     SHIFT + (posy + 6) * CELL_SIZE, 30, 30))
+            else:
+                self.background.set_button_off()
+
+        # проверка второго поля
+        elif self.scenes_idx == 3 and self.field_idx == 0 and \
+                self.isbtn(event.pos[0], SHIFT + CELL_SIZE * 17,
+                           SHIFT + CELL_SIZE * 27) and \
+                self.isbtn(event.pos[1], SHIFT + CELL_SIZE * 6,
+                           SHIFT + CELL_SIZE * 16):
+            # позиция в матрице
+            posx = (event.pos[0] - SHIFT) // CELL_SIZE - 17
+            posy = (event.pos[1] - SHIFT) // CELL_SIZE - 6
+            print(posx, posy, self.fields[1].field[posy][posx])
+            # возможен ли ход в эту клетку
+            if self.fields[1].field[posy][posx] != 'not available':
+                self.background.set_button_lighted(
+                    (SHIFT + (posx + 17) * CELL_SIZE,
+                     SHIFT + (posy + 6) * CELL_SIZE, 30, 30))
+            else:
+                self.background.set_button_off()
+
+        else:
+            self.background.set_button_off()
 
     def init_ships(self, group):
         # иницилизация кораблей
@@ -780,9 +873,20 @@ class Cross(pygame.sprite.Sprite):
 
 # задний фон и сцены
 class Background:
+    def __init__(self):
+        # координаты подсвеченной кнопки
+        self.light_button_coords = False
+
     def draw_background(self):
         # тетрадный лист
         pygame.draw.rect(SCREEN, 'white', (SHIFT, SHIFT, 900, 570))
+
+        # подсветка кнопки
+        if self.light_button_coords:
+            pygame.draw.rect(SCREEN, (210, 210, 210),
+                             self.light_button_coords)
+
+        # клетки
         for i in range(0, 900, CELL_SIZE):
             for j in range(0, 570, CELL_SIZE):
                 pygame.draw.rect(SCREEN, (135, 206, 235),
@@ -977,6 +1081,14 @@ class Background:
             SCREEN.blit(text, (90, 90))
             text = font.render(f'Игрок 2: {score[1][1]}', True, (0, 0, 255))
             SCREEN.blit(text, (420, 90))
+
+    def set_button_lighted(self, coords):
+        # включить подсветку кнопки
+        self.light_button_coords = coords
+
+    def set_button_off(self):
+        # отключить подсветку кнопки
+        self.light_button_coords = False
 
 
 def main():
